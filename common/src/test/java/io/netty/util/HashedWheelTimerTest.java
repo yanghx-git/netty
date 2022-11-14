@@ -15,22 +15,109 @@
  */
 package io.netty.util;
 
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.date.StopWatch;
+import cn.hutool.log.Log;
+import cn.hutool.log.LogFactory;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 时间轮测试
+ */
 public class HashedWheelTimerTest {
+
+
+    @Test
+    public void test1() throws InterruptedException {
+        Log log = LogFactory.get();
+        HashedWheelTimer hashedWheelTimer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS);
+
+         log.info("start {}", DateUtil.now());
+
+        hashedWheelTimer.newTimeout(timeout -> {
+            log.info("task {}", DateUtil.now());
+        }, 3, TimeUnit.SECONDS);
+
+        Thread.sleep(5000);
+
+
+    }
+
+
+
+    /**
+     * 这个例子是为了说明 里面的任务是串行执行的。
+     * <p>
+     * <p>
+     * start:2022-11-14 22:01:23
+     * task1:2022-11-14 22:01:26
+     * task2:2022-11-14 22:01:36
+     * <p>
+     * start 到 task1 之间是 delay 3秒
+     * task1 到 task2 之间是 中间睡眠了10秒。
+     * \n
+     * 实际task2的 delay 是4秒。如果task1是立即完成的，那么效果是这样的。
+     * start:2022-11-14 22:06:17
+     * task1:2022-11-14 22:06:20
+     * task2:2022-11-14 22:06:21
+     * <p>
+     * 所以，我们可以考虑改造一下，将task改为多多线程执行。以确保task不会堆积而造成延时。
+     *
+     * @throws Exception
+     */
+    @Test
+    public void test2() throws Exception {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        HashedWheelTimer hashedWheelTimer = new HashedWheelTimer(100, TimeUnit.MILLISECONDS);
+        System.out.println("start:" + LocalDateTime.now().format(formatter));
+
+        StopWatch stopWatch = new StopWatch();
+
+        CountDownLatch countDownLatch = new CountDownLatch(2);
+        stopWatch.start();
+
+        hashedWheelTimer.newTimeout(timeout -> {
+            System.out.println("task1:" + LocalDateTime.now().format(formatter));
+//            Thread.sleep(10000);
+            countDownLatch.countDown();
+        }, 3, TimeUnit.SECONDS);
+
+
+        hashedWheelTimer.newTimeout(timeout -> {
+            System.out.println("task2:" + LocalDateTime.now().format(formatter));
+            countDownLatch.countDown();
+        }, 4, TimeUnit.SECONDS);
+
+        countDownLatch.await();
+
+        stopWatch.stop();
+        String s = stopWatch.prettyPrint(TimeUnit.SECONDS);
+
+        System.out.println(s);
+    }
+
+    /**
+     * 触发实例过多警告
+     * <p>
+     * You are creating too many HashedWheelTimer instances. HashedWheelTimer is a shared resource that must be reused across the JVM, so that only a few instances are created.
+     */
+    @Test
+    public void test3() {
+        for (int i = 65; i > 0; i--) {
+            HashedWheelTimer timer = new HashedWheelTimer();
+
+        }
+
+        while (true) {
+
+        }
+    }
 
     @Test
     public void testScheduleTimeoutShouldNotRunBeforeDelay() throws InterruptedException {
@@ -121,7 +208,7 @@ public class HashedWheelTimerTest {
     @org.junit.jupiter.api.Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
     public void testTimerOverflowWheelLength() throws InterruptedException {
         final HashedWheelTimer timer = new HashedWheelTimer(
-            Executors.defaultThreadFactory(), 100, TimeUnit.MILLISECONDS, 32);
+                Executors.defaultThreadFactory(), 100, TimeUnit.MILLISECONDS, 32);
         final CountDownLatch latch = new CountDownLatch(3);
 
         timer.newTimeout(new TimerTask() {
@@ -158,7 +245,7 @@ public class HashedWheelTimerTest {
         for (int i = 0; i < scheduledTasks; i++) {
             long delay = queue.take();
             assertTrue(delay >= timeout && delay < maxTimeout,
-                "Timeout + " + scheduledTasks + " delay " + delay + " must be " + timeout + " < " + maxTimeout);
+                    "Timeout + " + scheduledTasks + " delay " + delay + " must be " + timeout + " < " + maxTimeout);
         }
 
         timer.stop();
@@ -197,7 +284,7 @@ public class HashedWheelTimerTest {
     @Test
     public void testRejectedExecutionExceptionWhenTooManyTimeoutsAreAddedBackToBack() {
         HashedWheelTimer timer = new HashedWheelTimer(Executors.defaultThreadFactory(), 100,
-            TimeUnit.MILLISECONDS, 32, true, 2);
+                TimeUnit.MILLISECONDS, 32, true, 2);
         timer.newTimeout(createNoOpTimerTask(), 5, TimeUnit.SECONDS);
         timer.newTimeout(createNoOpTimerTask(), 5, TimeUnit.SECONDS);
         try {
@@ -212,10 +299,10 @@ public class HashedWheelTimerTest {
 
     @Test
     public void testNewTimeoutShouldStopThrowingRejectedExecutionExceptionWhenExistingTimeoutIsCancelled()
-        throws InterruptedException {
+            throws InterruptedException {
         final int tickDurationMs = 100;
         final HashedWheelTimer timer = new HashedWheelTimer(Executors.defaultThreadFactory(), tickDurationMs,
-            TimeUnit.MILLISECONDS, 32, true, 2);
+                TimeUnit.MILLISECONDS, 32, true, 2);
         timer.newTimeout(createNoOpTimerTask(), 5, TimeUnit.SECONDS);
         Timeout timeoutToCancel = timer.newTimeout(createNoOpTimerTask(), 5, TimeUnit.SECONDS);
         assertTrue(timeoutToCancel.cancel());
@@ -232,10 +319,10 @@ public class HashedWheelTimerTest {
     @Test
     @org.junit.jupiter.api.Timeout(value = 3000, unit = TimeUnit.MILLISECONDS)
     public void testNewTimeoutShouldStopThrowingRejectedExecutionExceptionWhenExistingTimeoutIsExecuted()
-        throws InterruptedException {
+            throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(1);
         final HashedWheelTimer timer = new HashedWheelTimer(Executors.defaultThreadFactory(), 25,
-            TimeUnit.MILLISECONDS, 4, true, 2);
+                TimeUnit.MILLISECONDS, 4, true, 2);
         timer.newTimeout(createNoOpTimerTask(), 5, TimeUnit.SECONDS);
         timer.newTimeout(createCountDownLatchTimerTask(latch), 90, TimeUnit.MILLISECONDS);
 
