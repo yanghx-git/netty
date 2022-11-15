@@ -37,7 +37,8 @@ import static io.netty.util.internal.StringUtil.simpleClassName;
  *
  * 时间轮算法实现
  * 注释参照 https://zacard.net/2016/12/02/netty-hashedwheeltimer
- *
+ * 概念参照 https://www.luozhiyun.com/archives/59
+ * 概念参照 https://www.luozhiyun.com/archives/444
  * A {@link Timer} optimized for approximated I/O timeout scheduling.
  *
  * <h3>Tick Duration</h3>
